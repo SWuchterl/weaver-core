@@ -16,10 +16,9 @@ from utils.dataset import SimpleIterDataset
 from utils.import_tools import import_module
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--weaver-mode', type=str, default='class', choices=['class', 'reg', 'classreg', 'classregdomain','preprocess'],  # TODO: add more  
+parser.add_argument('--weaver-mode', type=str, default='class', choices=['class', 'reg', 'classreg', 'classdomain','classregdomain','preprocess'],  # TODO: add more  
                     help='class: classification task, reg: regression task, classreg: classification+regression,' 
-                    'classregdomain: classification+regression with domain adversarial, preprocess: only run re-weight step and produce the new yaml file'
-                )
+                    'classregdomain: classification+regression with domain adversarial, preprocess: only run re-weight step and produce the new yaml file')
 parser.add_argument('-c', '--data-config', type=str, default='',
                     help='data config YAML file')
 parser.add_argument('--extra-selection', type=str, default=None,
@@ -207,7 +206,7 @@ def to_filelist(args, mode='train'):
         if mode == 'train':
             local_world_size = int(os.environ['LOCAL_WORLD_SIZE'])
             if len(gpus) > 1: 
-                local_world_size = len(local_world_size);
+                local_world_size = len(local_world_size)
             new_file_dict = {}
             for name, files in file_dict.items():
                 new_files = files[args.local_rank::local_world_size]
@@ -286,13 +285,18 @@ def train_load(args):
         worker_init_fn=set_worker_sharing_strategy
     )
 
+    # print ("args.fetch_step_val", args.fetch_step_val)
+    # print ("args.data_val", args.data_val)
+    # print ("args.fetch_by_files_train", args.fetch_by_files_train)
+
     ## create validation dataset
     val_data = SimpleIterDataset(
         val_file_dict, args.data_config, for_training=True,
         load_range_and_fraction=(val_range, args.data_fraction),
         file_fraction=args.file_fraction,
         fetch_by_files=args.fetch_by_files_val if args.data_val else args.fetch_by_files_train,
-        fetch_step=args.fetch_step_val if args.data_val else args.fetch_by_files_train,
+        # fetch_step=args.fetch_step_val if args.data_val else args.fetch_by_files_train,
+        fetch_step=args.fetch_step_val,
         infinity_mode=args.steps_per_epoch_val is not None,
         in_memory=args.in_memory,
         max_resample=args.max_resample,
@@ -340,7 +344,7 @@ def preprocess_load(args):
         name='preprocess' + ('' if args.local_rank is None else '_rank%d' % args.local_rank)
     )
 
-    return preprocess_data;
+    return preprocess_data
 
 
 def test_load(args):
@@ -481,7 +485,7 @@ def profile(args, model, model_info, device):
 
     def trace_handler(p):
         output = p.key_averages().table(sort_by="self_cuda_time_total", row_limit=50)
-        print(output)
+        # print(output)
         p.export_chrome_trace("/tmp/trace_" + str(p.step_num) + ".json")
 
     with profile(
@@ -592,7 +596,7 @@ def optim(args, model, device):
             lr_step = round(args.lr_epochs / args.lr_epoch_to_start_decay)
             scheduler = torch.optim.lr_scheduler.MultiStepLR(
                 opt, milestones=[lr_step, 2 * lr_step], gamma=0.25, last_epoch=-1 if args.load_epoch is None else args.load_epoch)
-            scheduler._update_per_step = False;
+            scheduler._update_per_step = False
         elif args.lr_scheduler == 'flat+decay':
             num_decay_epochs = max(1, round(args.lr_epochs / args.lr_epoch_to_start_decay))
             milestones = list(range(args.lr_epochs - num_decay_epochs, args.lr_epochs))
@@ -604,14 +608,14 @@ def optim(args, model, device):
             else:
                 scheduler = torch.optim.lr_scheduler.MultiStepLR(
                     opt, milestones=milestones, gamma=gamma, last_epoch= -1 if args.load_epoch is None else args.load_epoch)
-            scheduler._update_per_step = False;
+            scheduler._update_per_step = False
         elif args.lr_scheduler == 'custom':
             scheduler1 = torch.optim.lr_scheduler.ConstantLR(
                 opt,args.start_lr,args.lr_epoch_to_start_decay, last_epoch= -1 if args.load_epoch is None else args.load_epoch)
-            learnfunc  = lambda epoch: args.lr_decay_rate ** max(0,epoch-args.lr_epoch_to_start_decay+1);
+            learnfunc  = lambda epoch: args.lr_decay_rate ** max(0,epoch-args.lr_epoch_to_start_decay+1)
             scheduler2 = torch.optim.lr_scheduler.LambdaLR(opt, learnfunc, last_epoch= -1 if args.load_epoch is None else args.load_epoch)
             scheduler  = torch.optim.lr_scheduler.ChainedScheduler([scheduler1,scheduler2])
-            scheduler._update_per_step = False;
+            scheduler._update_per_step = False
         elif args.lr_scheduler == 'flat+linear' or args.lr_scheduler == 'flat+cos':
             total_steps = args.lr_epochs * args.steps_per_epoch
             warmup_steps = args.warmup_steps
@@ -751,12 +755,25 @@ def save_root(args, output_path, data_config, scores, labels, targets, labels_do
         else:
             for idx, label_name in enumerate(data_config.label_domain_value):
                 output[label_name] = (labels_domain[data_config.label_domain_names[0]] == idx)
-                output['score_' + label_name] = scores[:,len(data_config.label_value)+len(data_config.target_value)+idx]    
+                output['score_' + label_name] = scores[:,len(data_config.label_value)+len(data_config.target_value)+idx]   
+    elif args.weaver_mode == "classdomain":
+        for idx, label_name in enumerate(data_config.label_value):
+            output[label_name] = (labels[data_config.label_names[0]] == idx)
+            output['score_' + label_name] = scores[:,idx]
+        if type(data_config.label_domain_value) == dict:
+            for idx, (k,v) in enumerate(data_config.label_domain_value.items()):
+                for idy, label_name in enumerate(v):
+                    output[label_name] = (labels_domain[k] == idy)
+                    output['score_' + label_name] = scores[:,len(data_config.label_value)+idx*len(v)+idy]    
+        else:
+            for idx, label_name in enumerate(data_config.label_domain_value):
+                output[label_name] = (labels_domain[data_config.label_domain_names[0]] == idx)
+                output['score_' + label_name] = scores[:,len(data_config.label_value)+idx]    
 
             
     else:
         _logger.warning("Weaver mode not recognized when saving output file --> abort")
-        sys.exit(0);
+        sys.exit(0)
 
     for k, v in labels.items():
         if k == data_config.label_names[0]:
@@ -808,18 +825,19 @@ def save_parquet(args, output_path, scores, labels, targets, labels_domain, obse
 
 
 def _main(args):
-
+    # torch.cuda.empty_cache()
     _logger.info('args:\n - %s', '\n - '.join(str(it) for it in args.__dict__.items()))
 
     # export to ONNX 
     if args.export_onnx:
-        onnx(args);
-        sys.exit(0);
+        onnx(args)
+        sys.exit(0)
 
     if args.file_fraction < 1:
         _logger.warning('Use of `file-fraction` is not recommended in general -- prefer using `data-fraction` instead.')
 
     # classification/regression mode
+    # print (args.weaver_mode)
     if args.weaver_mode == "class":
         _logger.info('Running in classification mode')
         from utils.nn.tools import train_classification as train
@@ -840,6 +858,11 @@ def _main(args):
         from utils.nn.tools_domain import train_classreg as train
         from utils.nn.tools_domain import evaluate_classreg as evaluate
         from utils.nn.tools_domain import evaluate_onnx_classreg as evaluate_onnx
+    elif args.weaver_mode == "classdomain":
+        _logger.info('Running in classification mode with domain adaptation')
+        from utils.nn.tools_domain import train_classdomain as train
+        from utils.nn.tools_domain import evaluate_classdomain as evaluate
+        from utils.nn.tools_domain import evaluate_onnx_classdomain as evaluate_onnx
 
     # training/testing mode
     training_mode = not args.predict
@@ -847,8 +870,8 @@ def _main(args):
     # device detection
     if args.gpus:
         if args.backend is not None:
-            local_rank = args.local_rank;
-            local_world_size = len(gpus);
+            local_rank = args.local_rank
+            local_world_size = len(gpus)
             torch.cuda.set_device(local_rank)
             gpus = [local_rank]
             dev = torch.device(local_rank)
@@ -875,10 +898,10 @@ def _main(args):
 
     # load data
     if args.weaver_mode == "preprocess":
-        preprocess_data = preprocess_load(args);
-        sys.exit(0);
+        preprocess_data = preprocess_load(args)
+        sys.exit(0)
     else:
-        torch.multiprocessing.set_sharing_strategy("file_system");
+        torch.multiprocessing.set_sharing_strategy("file_system")
         if training_mode:
             train_loader, val_loader, data_config, train_input_names, train_label_names, train_target_names = train_load(args)
         else:
@@ -887,14 +910,14 @@ def _main(args):
     if args.io_test:
         data_loader = train_loader if training_mode else list(test_loaders.values())[0]()
         iotest(args, data_loader)
-        sys.exit(0);
+        sys.exit(0)
 
     ## setup the model
     model, model_info, loss_func = model_setup(args, data_config)
     
     if args.profile:
         profile(args, model, model_info, device=dev)
-        sys.exit(0);
+        sys.exit(0)
         
     # note: we should always save/load the state_dict of the original model, not the one wrapped by nn.DataParallel
     # so we do not convert it to nn.DataParallel now
@@ -925,7 +948,7 @@ def _main(args):
                                  label_names=train_label_names+train_target_names)
             lr_finder.range_test(train_loader, start_lr=float(start_lr), end_lr=float(end_lr), num_iter=int(num_iter))
             lr_finder.plot(output='lr_finder.png')  # to inspect the loss-learning rate graph
-            sys.exit(0);
+            sys.exit(0)
 
         # training loop
         grad_scaler = torch.cuda.amp.GradScaler() if args.use_amp else None
@@ -945,7 +968,7 @@ def _main(args):
             _logger.info('-' * 50)
             _logger.info('Epoch #%d training' % epoch)
 
-            train(model,loss_func,opt,scheduler,train_loader,dev,epoch,steps_per_epoch=args.steps_per_epoch, grad_scaler=grad_scaler, tb_helper=tb);
+            train(model,loss_func,opt,scheduler,train_loader,dev,epoch,steps_per_epoch=args.steps_per_epoch, grad_scaler=grad_scaler, tb_helper=tb)
             
             if args.model_prefix and (args.backend is None or local_rank == 0):
                 dirname = os.path.dirname(args.model_prefix)
@@ -975,7 +998,7 @@ def _main(args):
     if args.data_test:
 
         if args.backend is not None and local_rank != 0:
-            sys.exit(0);
+            sys.exit(0)
         if training_mode:
             test_loaders, data_config = test_load(args)
 

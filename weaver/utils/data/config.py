@@ -110,12 +110,12 @@ class DataConfig(object):
             else:
                 self.label_names = tuple(self.label_value.keys())
                 self.var_funcs.update(self.label_value)
-                self.labelcheck_names = None;
+                self.labelcheck_names = None
         else:
-            self.label_names = tuple();
-            self.label_type  = None;
-            self.label_value = None;
-            self.labelcheck_names = None;
+            self.label_names = tuple()
+            self.label_type  = None
+            self.label_value = None
+            self.labelcheck_names = None
 
         ## domain
         if opts['labels_domain']:
@@ -133,20 +133,20 @@ class DataConfig(object):
                 self.label_domain_names = tuple(self.label_domain_value.keys())                
                 self.labelcheck_domain_names = ()
                 self.label_domain_loss_weight = opts['labels_domain']['loss_weight']            
-                label_check_exprs = [];
+                label_check_exprs = []
                 for key, value in self.label_domain_value.items():
                     label_exprs = ['ak.to_numpy(%s)' % k for k in value]
-                    label_check_exprs.append(label_exprs);                    
+                    label_check_exprs.append(label_exprs)                    
                     self.var_funcs[key] = 'np.argmax(np.stack([%s], axis=1), axis=1)' % (','.join(label_exprs))            
-                    self.labelcheck_domain_names += (key.replace('label','labelcheck'),);
+                    self.labelcheck_domain_names += (key.replace('label','labelcheck'),)
                     self.var_funcs[key.replace('label','labelcheck')] = 'np.sum(np.stack([%s], axis=1), axis=1)' % (','.join(label_exprs))            
                 self.var_funcs['_labelcheck_domain_'] = 'np.sum(np.stack([%s], axis=1), axis=1)' % (','.join(','.join(value) for value in label_check_exprs))                
         else:
-            self.label_domain_names = tuple();
-            self.label_domain_type  = None;
-            self.label_domain_value = None;
-            self.labelcheck_domain_names = None;
-            self.label_domain_loss_weight = None;
+            self.label_domain_names = tuple()
+            self.label_domain_type  = None
+            self.label_domain_value = None
+            self.labelcheck_domain_names = None
+            self.label_domain_loss_weight = None
                 
         # targets
         if opts['targets']:
@@ -155,14 +155,14 @@ class DataConfig(object):
             if 'quantile' in opts['targets']:
                 self.target_quantile = opts['targets']['quantile']
             else:
-                self.target_quantile = None;
+                self.target_quantile = None
             self.target_names = tuple(self.target_value.keys())
             self.var_funcs.update(self.target_value)
         else:
-            self.target_names = tuple();
-            self.target_type  = None;
-            self.target_value = None;
-            self.target_quantile = None;
+            self.target_names = tuple()
+            self.target_type  = None
+            self.target_value = None
+            self.target_quantile = None
 
         self.basewgt_name = '_basewgt_'
         self.weight_name = None        

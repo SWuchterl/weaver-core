@@ -61,13 +61,15 @@ def _finalize_inputs(table, data_config):
 
 def _get_reweight_indices(weights, up_sample=True, max_resample=10, max_resample_dom=3, weight_scale=1):
 
+    print (weights, len(weights))
     ## separate domain events from normal ones
-    indices_cat = np.argwhere(weights>=0).squeeze();
-    weights_cat = weights[indices_cat].squeeze();
+    indices_cat = np.argwhere(weights>=0).squeeze()
+    weights_cat = weights[indices_cat].squeeze()
     randwgt_cat = np.random.uniform(low=0, high=weight_scale, size=len(weights_cat))
     keep_flags_cat  = randwgt_cat < weights_cat
-    indices_dom = np.argwhere(weights<0).squeeze();
-    weights_dom = weights[indices_dom].squeeze();
+    indices_dom = np.argwhere(weights<0).squeeze()
+    weights_dom = weights[indices_dom].squeeze()
+    print (weights_dom)
     randwgt_dom    = np.random.uniform(low=0, high=weight_scale, size=len(weights_dom))
     keep_flags_dom = randwgt_dom < np.absolute(weights_dom)
 
@@ -131,7 +133,7 @@ def _preprocess(table, data_config, options):
         _check_labels(table)
     # compute reweight indices
     if (options['reweight'] and data_config.weight_name is not None):
-        wgts = _build_weights(table, data_config, warn=warn_once)
+        wgts = _build_weights(table, data_config)
         indices = _get_reweight_indices(wgts, up_sample=options['up_sample'],weight_scale=options['weight_scale'], max_resample=options['max_resample'], max_resample_dom=options['max_resample_dom'])
     else:
         if len(data_config.label_names) > 0:
@@ -283,13 +285,16 @@ class _SimpleIter(object):
                 return
 
         if self._fetch_by_files:
+            # print ( "self._fetch_by_files")
             filelist = self.filelist[int(self.ipos): int(self.ipos + self._fetch_step)]
             load_range = self.load_range
         else:
+            print ("not  self._fetch_by_files")
             filelist = self.filelist
+            print (self.ipos, self._fetch_step, self.load_range, self.load_range[1])
             load_range = (self.ipos, min(self.ipos + self._fetch_step, self.load_range[1]))
 
-        # _logger.info('Start fetching next batch, len(filelist)=%d, load_range=%s'%(len(filelist), load_range))
+        _logger.info('Start fetching next batch, len(filelist)=%d, load_range=%s'%(len(filelist), load_range))
         if self._async_load:
             self.prefetch = self.executor.submit(_load_next, self._data_config,
                                                  filelist, load_range, self._sampler_options)
@@ -308,7 +313,7 @@ class _SimpleIter(object):
         if self._data_config.label_domain_names:
             y_domain = {k: self.table[k][i].copy() for k in self._data_config.label_domain_names}        
         else:
-            y_domain = {};
+            y_domain = {}
         # observers / monitor variables
         Z = {k: self.table[k][i].copy() for k in self._data_config.z_variables}
         # labelcheck for classificaiton
@@ -317,7 +322,7 @@ class _SimpleIter(object):
         if self._data_config.labelcheck_domain_names:
             y_domain_check = {k: self.table[k][i].copy() for k in self._data_config.labelcheck_domain_names}            
         else:
-            y_domain_check = {};
+            y_domain_check = {}
         return X, y_cat, y_reg, y_domain, Z, y_cat_check, y_domain_check 
 
 class SimpleIterDataset(torch.utils.data.IterableDataset):

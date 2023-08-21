@@ -34,9 +34,9 @@ def train_classification(model, loss_func, opt, scheduler, train_loader, dev, ep
 
 
     model.train()
-    torch.backends.cudnn.benchmark = True; 
-    torch.backends.cudnn.enabled = True;
-    gc.enable();
+    torch.backends.cudnn.benchmark = True 
+    torch.backends.cudnn.enabled = True
+    gc.enable()
 
     data_config = train_loader.dataset.config
     label_counter = Counter()
@@ -64,8 +64,8 @@ def train_classification(model, loss_func, opt, scheduler, train_loader, dev, ep
             with torch.cuda.amp.autocast(enabled=grad_scaler is not None):
                 model_output = model(*inputs)                
                 model_output = _flatten_preds(model_output, label_mask)
-                model_output = model_output.squeeze().float();
-                label = label.squeeze();
+                model_output = model_output.squeeze().float()
+                label = label.squeeze()
                 loss = loss_func(model_output, label)
             if grad_scaler is None:
                 loss.backward()
@@ -79,7 +79,7 @@ def train_classification(model, loss_func, opt, scheduler, train_loader, dev, ep
                 scheduler.step()
 
             loss  = loss.detach().item()
-            label = label.detach();
+            label = label.detach()
             _, preds = model_output.detach().max(1)
             num_batches += 1
             count += num_examples
@@ -123,7 +123,7 @@ def train_classification(model, loss_func, opt, scheduler, train_loader, dev, ep
         tb_helper.batch_train_count += num_batches
 
     torch.cuda.empty_cache()
-    gc.collect();
+    gc.collect()
 
 ## evaluate a classifier for which classes are condensed into a single label_name --> argmax of numpy
 def evaluate_classification(model, test_loader, dev, epoch, for_training=True, loss_func=None, steps_per_epoch=None, tb_helper=None,
@@ -131,12 +131,12 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
 
     model.eval()
     if for_training:
-        torch.backends.cudnn.benchmark = True;
-        torch.backends.cudnn.enabled = True;
+        torch.backends.cudnn.benchmark = True
+        torch.backends.cudnn.enabled = True
     else:
-        torch.backends.cudnn.benchmark = False;
-        torch.backends.cudnn.enabled = False;
-    gc.enable();
+        torch.backends.cudnn.benchmark = False
+        torch.backends.cudnn.enabled = False
+    gc.enable()
 
     data_config = test_loader.dataset.config
 
@@ -149,7 +149,7 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
     targets = defaultdict(list)
     labels_domain = defaultdict(list)
     observers = defaultdict(list)
-    num_labels = len(data_config.label_value);
+    num_labels = len(data_config.label_value)
 
     start_time = time.time()
 
@@ -184,13 +184,13 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
 
                 model_output = model(*inputs)
                 model_output = _flatten_preds(model_output, label_mask)                
-                model_output = model_output.squeeze().float();
-                label = label.squeeze();
+                model_output = model_output.squeeze().float()
+                label = label.squeeze()
 
                 if model_output.shape[0] == num_examples:
                     scores.append(torch.softmax(model_output,dim=1).cpu().numpy().astype(dtype=np.float32))
                 else:
-                    scores.append(torch.zeros(num_examples,num_labels).cpu().numpy().astype(dtype=np.float32));
+                    scores.append(torch.zeros(num_examples,num_labels).cpu().numpy().astype(dtype=np.float32))
       
                 loss = 0 if loss_func is None else loss_func(model_output, label).item()
                 
@@ -239,7 +239,7 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
 
     torch.cuda.empty_cache()
     if for_training:
-        gc.collect();
+        gc.collect()
         return total_correct / count
     else:
         # convert 2D labels/scores
@@ -254,7 +254,7 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
                 scores = scores.reshape((entry_count, int(count / entry_count), -1)).transpose((1, 2))
                 for k, v in labels.items():
                     labels[k] = v.reshape((entry_count, -1))
-        gc.collect();
+        gc.collect()
         return total_correct / count, scores, labels, targets, labels_domain, observers
 
 ## evaluate a classifier for which classes are condensed into a single label_name --> argmax of numpy --> use ONNX instead of pytorch
@@ -264,7 +264,7 @@ def evaluate_onnx_classification(model_path, test_loader, eval_metrics=['roc_auc
     sess = onnxruntime.InferenceSession(model_path, providers=['CPUExecutionProvider'])
 
     data_config = test_loader.dataset.config
-    gc.enable();
+    gc.enable()
 
     label_counter = Counter()
     total_correct, count = 0, 0, 0
@@ -274,7 +274,7 @@ def evaluate_onnx_classification(model_path, test_loader, eval_metrics=['roc_auc
     targets = defaultdict(list)
     observers = defaultdict(list)
     inputs, label, score, preds, correct = None, None, None, None, None
-    start_time = time.time();
+    start_time = time.time()
 
     with tqdm.tqdm(test_loader) as tq:
         for X, y_cat, _, _, Z, _, _ in tq:
@@ -290,10 +290,10 @@ def evaluate_onnx_classification(model_path, test_loader, eval_metrics=['roc_auc
                 else:
                     observers[k].append(v.cpu().numpy().astype(dtype=np.float32))
             score = sess.run([], inputs)
-            score = torch.as_tensor(np.array(score)).squeeze();
+            score = torch.as_tensor(np.array(score)).squeeze()
             scores.append(score.cpu().numpy().astype(dtype=np.float32))
             preds = score.squeeze().float().argmax(1)
-            label = label.squeeze();
+            label = label.squeeze()
             correct = (preds == label).sum()
             total_correct += correct
             count += num_examples
@@ -314,7 +314,7 @@ def evaluate_onnx_classification(model_path, test_loader, eval_metrics=['roc_auc
     _logger.info('Evaluation metrics: \n%s', '\n'.join(
         ['    - %s: \n%s' % (k, str(v)) for k, v in metric_results.items()]))
 
-    gc.collect();
+    gc.collect()
     return total_correct / count, scores, labels, targets, labels_domain, observers
 
 
@@ -323,10 +323,10 @@ def train_regression(model, loss_func, opt, scheduler, train_loader, dev, epoch,
 
     model.train()
 
-    torch.backends.cudnn.benchmark = True;
-    torch.backends.cudnn.enabled = True;
+    torch.backends.cudnn.benchmark = True
+    torch.backends.cudnn.enabled = True
 
-    gc.enable();
+    gc.enable()
 
     data_config = train_loader.dataset.config
 
@@ -339,7 +339,7 @@ def train_regression(model, loss_func, opt, scheduler, train_loader, dev, epoch,
             inputs = [X[k].to(dev,non_blocking=True) for k in data_config.input_names]
             for idx, names in enumerate(data_config.target_names):
                 if idx == 0:
-                    target = y_reg[names].float();
+                    target = y_reg[names].float()
                 else:
                     target = torch.column_stack((target,y_reg[names].float()))
             num_examples = target.shape[0]
@@ -347,8 +347,8 @@ def train_regression(model, loss_func, opt, scheduler, train_loader, dev, epoch,
             model.zero_grad(set_to_none=True)
             with torch.cuda.amp.autocast(enabled=grad_scaler is not None):
                 model_output = model(*inputs)
-                model_output = model_output.squeeze().float();
-                target = target.squeeze();
+                model_output = model_output.squeeze().float()
+                target = target.squeeze()
                 loss  = loss_func(model_output, target)
             if grad_scaler is None:
                 loss.backward()
@@ -366,8 +366,8 @@ def train_regression(model, loss_func, opt, scheduler, train_loader, dev, epoch,
             count += num_examples
             total_loss += loss
             preds = model_output.detach().float()
-            target = target.detach();
-            e = preds - target;
+            target = target.detach()
+            e = preds - target
             abs_err = e.abs().sum().item()
             sum_abs_err += abs_err
             sqr_err = e.square().sum().item()
@@ -414,19 +414,19 @@ def train_regression(model, loss_func, opt, scheduler, train_loader, dev, epoch,
         tb_helper.batch_train_count += num_batches
 
     torch.cuda.empty_cache()
-    gc.collect();
+    gc.collect()
 
 def evaluate_regression(model, test_loader, dev, epoch, for_training=True, loss_func=None, steps_per_epoch=None, tb_helper=None,
                         eval_metrics=['mean_squared_error', 'mean_absolute_error', 'median_absolute_error', 'mean_gamma_deviance']):
 
     model.eval()
     if for_training:
-        torch.backends.cudnn.benchmark = True;
-        torch.backends.cudnn.enabled = True;
+        torch.backends.cudnn.benchmark = True
+        torch.backends.cudnn.enabled = True
     else:
-        torch.backends.cudnn.benchmark = False;
-        torch.backends.cudnn.enabled = False;
-    gc.enable();
+        torch.backends.cudnn.benchmark = False
+        torch.backends.cudnn.enabled = False
+    gc.enable()
 
     data_config = test_loader.dataset.config
 
@@ -442,7 +442,7 @@ def evaluate_regression(model, test_loader, dev, epoch, for_training=True, loss_
                 inputs = [X[k].to(dev,non_blocking=True) for k in data_config.input_names]
                 for idx, names in enumerate(data_config.target_names):
                     if idx == 0:
-                        target = y_reg[names].float();
+                        target = y_reg[names].float()
                     else:
                         target = torch.column_stack((target,y_reg[names].float()))
                 num_examples = target.shape[0]
@@ -457,10 +457,10 @@ def evaluate_regression(model, test_loader, dev, epoch, for_training=True, loss_
                             observers[k].append(v.cpu().numpy().astype(dtype=np.float32))
 
                 model_output = model(*inputs)
-                model_output = model_output.squeeze().float();
+                model_output = model_output.squeeze().float()
                 scores.append(model_output.cpu().numpy().astype(dtype=np.float32))      
 
-                target =  target.squeeze();
+                target =  target.squeeze()
                 loss = 0 if loss_func is None else loss_func(model_output, target).item()
 
                 num_batches += 1
@@ -505,7 +505,7 @@ def evaluate_regression(model, test_loader, dev, epoch, for_training=True, loss_
             with torch.no_grad():
                 tb_helper.custom_fn(model_output=model_output, model=model, epoch=epoch, i_batch=-1, mode=tb_mode)
 
-    scores = np.concatenate(scores).squeeze();
+    scores = np.concatenate(scores).squeeze()
     targets = {k: _concat(v) for k, v in targets.items()}
     observers = {k: _concat(v) for k, v in observers.items()}        
 
@@ -520,12 +520,12 @@ def evaluate_regression(model, test_loader, dev, epoch, for_training=True, loss_
 
     torch.cuda.empty_cache()
     if for_training:
-        gc.collect();
+        gc.collect()
         return total_loss / num_batches
     else:
         # convert 2D targets/scores
         scores = scores.reshape(len(scores),len(data_config.target_names))
-        gc.collect();
+        gc.collect()
         return total_loss / num_batches, scores, labels, targets, labels_domain, observers
         
 ## evaluate regression via ONNX
@@ -535,7 +535,7 @@ def evaluate_onnx_regression(model_path, test_loader,
     import onnxruntime
     sess = onnxruntime.InferenceSession(model_path, providers=['CPUExecutionProvider'])
 
-    gc.enable();
+    gc.enable()
 
     data_config = test_loader.dataset.config
 
@@ -551,7 +551,7 @@ def evaluate_onnx_regression(model_path, test_loader,
             inputs = {k: v.numpy().astype(dtype=np.float32) for k, v in X.items()}
             for idx, names in enumerate(data_config.target_names):
                 if idx == 0:
-                    target = y[names].float();
+                    target = y[names].float()
                 else:
                     target = torch.column_stack((target,y[names].float()))
             num_examples = target.shape[0]            
@@ -566,10 +566,10 @@ def evaluate_onnx_regression(model_path, test_loader,
             score = sess.run([], inputs)
             score = torch.as_tensor(np.array(score)).squeeze()
             scores.append(score.cpu().numpy().astype(dtype=np.float32))
-            preds = score.squeeze().float();
-            target = target.squeeze();
+            preds = score.squeeze().float()
+            target = target.squeeze()
 
-            num_batches += 1;
+            num_batches += 1
             count += num_examples
 
             e = preds - target
@@ -600,7 +600,7 @@ def evaluate_onnx_regression(model_path, test_loader,
         _logger.info('Evaluation metrics: \n%s', '\n'.join(
             ['    - %s: \n%s' % (k, str(v)) for k, v in metric_results.items()]))
         
-    gc.collect();
+    gc.collect()
 
     scores = scores.reshape(len(scores),len(data_config.target_names))
     return total_loos/num_batches, scores, labels, targets, labels_domain, observers
@@ -611,23 +611,23 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
 
     model.train()
 
-    torch.backends.cudnn.benchmark = True;
-    torch.backends.cudnn.enabled = True;
+    torch.backends.cudnn.benchmark = True
+    torch.backends.cudnn.enabled = True
 
-    gc.enable();
+    gc.enable()
 
     data_config = train_loader.dataset.config
 
     num_batches, total_loss, total_cat_loss, total_reg_loss, count = 0, 0, 0, 0, 0
     label_counter = Counter()
     total_correct, sum_abs_err, sum_sqr_err = 0, 0 ,0
-    inputs, target, label, model_output = None, None, None, None;
-    loss, loss_cat, loss_reg, pred_cat, pred_reg, residual_reg, correct = None, None, None, None, None, None, None;
+    inputs, target, label, model_output = None, None, None, None
+    loss, loss_cat, loss_reg, pred_cat, pred_reg, residual_reg, correct = None, None, None, None, None, None, None
 
     start_time = time.time()
 
-    num_labels  = len(data_config.label_value);
-    num_targets = len(data_config.target_value);
+    num_labels  = len(data_config.label_value)
+    num_targets = len(data_config.target_value)
 
     with tqdm.tqdm(train_loader) as tq:
         for X, y_cat, y_reg, _, _, _, _ in tq:
@@ -640,11 +640,11 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
             ### build regression targets
             for idx, names in enumerate(data_config.target_names):
                 if idx == 0:
-                    target = y_reg[names].float();
+                    target = y_reg[names].float()
                 else:
                     target = torch.column_stack((target,y_reg[names].float()))
             ### Number of samples in the batch
-            num_examples = max(label.shape[0],target.shape[0]);
+            num_examples = max(label.shape[0],target.shape[0])
             ### Send to device
             label  = label.to(dev,non_blocking=True)
             target = target.to(dev,non_blocking=True)            
@@ -653,15 +653,15 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
             with torch.cuda.amp.autocast(enabled=grad_scaler is not None):
                 ### evaluate the model
                 model_output = model(*inputs)                
-                model_output_cat = model_output[:,:num_labels];
-                model_output_reg = model_output[:,num_labels:num_labels+num_targets];
+                model_output_cat = model_output[:,:num_labels]
+                model_output_reg = model_output[:,num_labels:num_labels+num_targets]
                 model_output_cat = _flatten_preds(model_output_cat,None)
-                model_output_cat = model_output_cat.squeeze().float();
-                model_output_reg = model_output_reg.squeeze().float();
-                label = label.squeeze();
-                target = target.squeeze();
+                model_output_cat = model_output_cat.squeeze().float()
+                model_output_reg = model_output_reg.squeeze().float()
+                label = label.squeeze()
+                target = target.squeeze()
                 ### evaluate loss function
-                loss, loss_cat, loss_reg = loss_func(model_output_cat,label,model_output_reg,target);
+                loss, loss_cat, loss_reg = loss_func(model_output_cat,label,model_output_reg,target)
 
             ### back propagation
             if grad_scaler is None:
@@ -680,10 +680,10 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
             loss_cat = loss_cat.detach().item()
             loss_reg = loss_reg.detach().item()
             total_loss += loss
-            total_cat_loss += loss_cat;
-            total_reg_loss += loss_reg;
+            total_cat_loss += loss_cat
+            total_reg_loss += loss_reg
             num_batches += 1
-            count += num_examples;
+            count += num_examples
             
             ## take the classification prediction and compare with the true labels            
             label = label.detach()
@@ -693,10 +693,10 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
             total_correct += correct
 
             ## take the regression prediction and compare with true targets
-            pred_reg = model_output_reg.detach().float();
-            residual_reg = pred_reg - target;            
-            abs_err = residual_reg.abs().sum().item();
-            sum_abs_err += abs_err;
+            pred_reg = model_output_reg.detach().float()
+            residual_reg = pred_reg - target            
+            abs_err = residual_reg.abs().sum().item()
+            sum_abs_err += abs_err
             sqr_err = residual_reg.square().sum().item()
             sum_sqr_err += sqr_err
 
@@ -755,7 +755,7 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
         tb_helper.batch_train_count += num_batches
 
     torch.cuda.empty_cache()
-    gc.collect();
+    gc.collect()
 
 ## evaluate classification + regression task
 def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_func=None, steps_per_epoch=None, tb_helper=None,
@@ -764,23 +764,23 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
 
     model.eval()
     if for_training:
-        torch.backends.cudnn.benchmark = True;
-        torch.backends.cudnn.enabled = True;
+        torch.backends.cudnn.benchmark = True
+        torch.backends.cudnn.enabled = True
     else:
-        torch.backends.cudnn.benchmark = False;
-        torch.backends.cudnn.enabled = False;
-    gc.enable();
+        torch.backends.cudnn.benchmark = False
+        torch.backends.cudnn.enabled = False
+    gc.enable()
 
     data_config = test_loader.dataset.config
     label_counter = Counter()
-    total_loss, total_cat_loss, total_reg_loss, num_batches, total_correct, sum_sqr_err, sum_abs_err, entry_count, count = 0, 0, 0, 0, 0, 0, 0, 0, 0;
-    inputs, label, target,  model_output, pred_cat_output, pred_reg, loss, loss_cat, loss_reg = None, None, None, None, None , None, None, None, None;
-    scores_cat, scores_reg = [], [];
-    labels, targets, labels_domain, observers = defaultdict(list), defaultdict(list), defaultdict(list), defaultdict(list);
+    total_loss, total_cat_loss, total_reg_loss, num_batches, total_correct, sum_sqr_err, sum_abs_err, entry_count, count = 0, 0, 0, 0, 0, 0, 0, 0, 0
+    inputs, label, target,  model_output, pred_cat_output, pred_reg, loss, loss_cat, loss_reg = None, None, None, None, None , None, None, None, None
+    scores_cat, scores_reg = [], []
+    labels, targets, labels_domain, observers = defaultdict(list), defaultdict(list), defaultdict(list), defaultdict(list)
     start_time = time.time()
 
-    num_labels  = len(data_config.label_value);
-    num_targets = len(data_config.target_value);
+    num_labels  = len(data_config.label_value)
+    num_targets = len(data_config.target_value)
 
     with torch.no_grad():
         with tqdm.tqdm(test_loader) as tq:
@@ -794,11 +794,11 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                 ### build regression targets
                 for idx, names in enumerate(data_config.target_names):
                     if idx == 0:
-                        target = y_reg[names].float();
+                        target = y_reg[names].float()
                     else:
                         target = torch.column_stack((target,y_reg[names].float()))
                 ### update counters
-                num_examples = max(label.shape[0],target.shape[0]);
+                num_examples = max(label.shape[0],target.shape[0])
                 entry_count += num_examples
                 ### send to device
                 label  = label.to(dev,non_blocking=True)                
@@ -819,23 +819,23 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                 ### evaluate model
                 model_output = model(*inputs)
                 ### build classification and regression outputs
-                model_output_cat = model_output[:,:num_labels];
-                model_output_reg = model_output[:,num_labels:num_labels+num_targets];
+                model_output_cat = model_output[:,:num_labels]
+                model_output_reg = model_output[:,num_labels:num_labels+num_targets]
                 model_output_cat = _flatten_preds(model_output_cat,None)
-                model_output_cat = model_output_cat.squeeze().float();
-                model_output_reg = model_output_reg.squeeze().float();
-                label  = label.squeeze();
-                target = target.squeeze();
+                model_output_cat = model_output_cat.squeeze().float()
+                model_output_reg = model_output_reg.squeeze().float()
+                label  = label.squeeze()
+                target = target.squeeze()
                 ### save scores
                 if model_output_cat.shape[0] == num_examples and model_output_reg.shape[0] == num_examples:
-                    scores_cat.append(torch.softmax(model_output_cat,dim=1).cpu().numpy().astype(dtype=np.float32));
+                    scores_cat.append(torch.softmax(model_output_cat,dim=1).cpu().numpy().astype(dtype=np.float32))
                     scores_reg.append(model_output_reg.cpu().numpy().astype(dtype=np.float32))
                 else:
-                    scores_cat.append(torch.zeros(num_examples,num_labels).cpu().numpy().astype(dtype=np.float32));
+                    scores_cat.append(torch.zeros(num_examples,num_labels).cpu().numpy().astype(dtype=np.float32))
                     if num_targets > 1:
-                        scores_reg.append(torch.zeros(num_examples,num_targets).cpu().numpy().astype(dtype=np.float32));
+                        scores_reg.append(torch.zeros(num_examples,num_targets).cpu().numpy().astype(dtype=np.float32))
                     else:
-                        scores_reg.append(torch.zeros(num_examples).cpu().numpy().astype(dtype=np.float32));                        
+                        scores_reg.append(torch.zeros(num_examples).cpu().numpy().astype(dtype=np.float32))                        
                     
                 ### evaluate loss function
                 if loss_func != None:
@@ -848,7 +848,7 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                     total_cat_loss += loss_cat
                     total_reg_loss += loss_reg
                 else:
-                    loss,loss_cat,loss_reg = 0,0,0;
+                    loss,loss_cat,loss_reg = 0,0,0
                     total_loss += loss
                     total_cat_loss += loss_cat
                     total_reg_loss += loss_reg
@@ -863,9 +863,9 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
                     total_correct += correct
                     ### regression spread
                     pred_reg = model_output_reg.float()
-                    residual_reg = pred_reg - target;
-                    abs_err = residual_reg.abs().sum().item();
-                    sum_abs_err += abs_err;
+                    residual_reg = pred_reg - target
+                    abs_err = residual_reg.abs().sum().item()
+                    sum_abs_err += abs_err
                     sqr_err = residual_reg.square().sum().item()
                     sum_sqr_err += sqr_err
 
@@ -932,17 +932,17 @@ def evaluate_classreg(model, test_loader, dev, epoch, for_training=True, loss_fu
 
     torch.cuda.empty_cache()
     if for_training:
-        gc.collect();
-        return total_loss / num_batches;
+        gc.collect()
+        return total_loss / num_batches
     else:
         if scores_reg.ndim and scores_cat.ndim: 
             scores_reg = scores_reg.reshape(len(scores_reg),len(data_config.target_names))
             scores = np.concatenate((scores_cat,scores_reg),axis=1)
-            gc.collect();
+            gc.collect()
             return total_loss / num_batches, scores, labels, targets, labels_domain, observers
         else:
-            gc.collect();
-            return total_loss / num_batches, scores_reg, labels, targets, labels_domain, observers;
+            gc.collect()
+            return total_loss / num_batches, scores_reg, labels, targets, labels_domain, observers
 
 
 def evaluate_onnx_classreg(model_path, test_loader,
@@ -952,32 +952,32 @@ def evaluate_onnx_classreg(model_path, test_loader,
     import onnxruntime
     sess = onnxruntime.InferenceSession(model_path, providers=['CPUExecutionProvider'])
 
-    gc.enable();
+    gc.enable()
 
     data_config = test_loader.dataset.config
     label_counter = Counter()
     num_batches, total_loss, total_cat_loss, total_reg_loss, total_correct, sum_sqr_err, sum_abs_err, count = 0, 0, 0, 0, 0, 0, 0, 0
     scores_cat, scores_reg = [], []
     labels, targets, observers, labels_domain = defaultdict(list), defaultdict(list), defaultdict(list), defaultdict(list)
-    inputs, label, pred_cat, pred_reg, loss, loss_cat, loss_reg = None, None, None, None, None, None, None;
+    inputs, label, pred_cat, pred_reg, loss, loss_cat, loss_reg = None, None, None, None, None, None, None
     
     start_time = time.time()
 
-    num_labels  = len(data_config.label_value);
-    num_targets = len(data_config.target_value);
+    num_labels  = len(data_config.label_value)
+    num_targets = len(data_config.target_value)
 
     with tqdm.tqdm(test_loader) as tq:
         for X, y_cat, y_reg, _, Z, _, _ in tq:
             ### input features for the model
             inputs = {k: v.numpy() for k, v in X.items()}
-            label = y_cat[data_config.label_names[0]].long();
+            label = y_cat[data_config.label_names[0]].long()
             label_counter.update(label.cpu().numpy().astype(dtype=np.int32))
             for idx, names in enumerate(data_config.target_names):
                 if idx == 0:
-                    target = y_reg[names].float();
+                    target = y_reg[names].float()
                 else:
                     target = torch.column_stack((target,y_reg[names].float()))
-            num_examples = max(label.shape[0],target.shape[0]);
+            num_examples = max(label.shape[0],target.shape[0])
             ### define truth labels for classification and regression
             for k, name in enumerate(data_config.label_names):                    
                 labels[name].append(_flatten_label(y_cat[name],None).cpu().numpy().astype(dtype=np.int32))
@@ -990,20 +990,20 @@ def evaluate_onnx_classreg(model_path, test_loader,
                     observers[k].append(v.cpu().numpy().astype(dtype=np.float32))
             ### evaluate the network
             score = sess.run([], inputs)
-            score = torch.as_tensor(np.array(score)).squeeze();
-            scores_cat.append(score[:,:num_labels].cpu().numpy().astype(dtype=np.float32));
-            scores_reg.append(score[:,num_labels:num_labels+num_targets].cpu().numpy().astype(dtype=np.float32));
-            pred_cat = score[:,:num_labels].squeeze().float().argmax(1);
-            pred_reg = score[:,num_labels:num_labels+num_targets].squeeze().float();
+            score = torch.as_tensor(np.array(score)).squeeze()
+            scores_cat.append(score[:,:num_labels].cpu().numpy().astype(dtype=np.float32))
+            scores_reg.append(score[:,num_labels:num_labels+num_targets].cpu().numpy().astype(dtype=np.float32))
+            pred_cat = score[:,:num_labels].squeeze().float().argmax(1)
+            pred_reg = score[:,num_labels:num_labels+num_targets].squeeze().float()
             count += num_examples
-            num_batches += 1;
+            num_batches += 1
 
             if pred_cat.shape[0] == num_examples and pred_reg.shape[0] == num_examples:
                 correct = (pred_cat == label).sum().item()
                 total_correct += correct
-                residual_reg = pred_reg - target;
-                abs_err = residual_reg.abs().sum().item();
-                sum_abs_err += abs_err;
+                residual_reg = pred_reg - target
+                abs_err = residual_reg.abs().sum().item()
+                sum_abs_err += abs_err
                 sqr_err = residual_reg.square().sum().item()
                 sum_sqr_err += sqr_err
 
@@ -1043,10 +1043,10 @@ def evaluate_onnx_classreg(model_path, test_loader,
     if scores_reg.ndim and scores_cat.ndim: 
         scores_reg = scores_reg.reshape(len(scores_reg),len(data_config.target_names))
         scores = np.concatenate((scores_cat,scores_reg),axis=1)        
-        gc.collect();
+        gc.collect()
         return total_loss / num_batches, scores, labels, targets, labels_domain, observers
     else:
-        gc.collect();
+        gc.collect()
         return total_loss / num_batches, scores_reg, labels, targets, labels_domain, observers
 
 class TensorboardHelper(object):
