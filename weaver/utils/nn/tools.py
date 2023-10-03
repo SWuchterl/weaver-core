@@ -42,7 +42,9 @@ def train_classification(model, loss_func, opt, scheduler, train_loader, dev, ep
     count = 0
     start_time = time.time()
     with tqdm.tqdm(train_loader) as tq:
-        for X, y, _ in tq:
+        # for X, y, _ in tq:
+        # for X, y, _, _, y_cat_check, y_domain_check in tq:
+        for X, y, y_domain, Z, y_cat_check, y_domain_check  in tq:
             inputs = [X[k].to(dev) for k in data_config.input_names]
             label = y[data_config.label_names[0]].long()
             try:
@@ -133,11 +135,13 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
     scores = []
     labels = defaultdict(list)
     labels_counts = []
+    labels_domain = defaultdict(list)
     observers = defaultdict(list)
     start_time = time.time()
     with torch.no_grad():
         with tqdm.tqdm(test_loader) as tq:
-            for X, y, Z in tq:
+            # for X, y, Z in tq:
+            for X, y, y_domain, Z, y_cat_check, y_domain_check in tq:
                 inputs = [X[k].to(dev) for k in data_config.input_names]
                 label = y[data_config.label_names[0]].long()
                 entry_count += label.shape[0]
@@ -201,6 +205,9 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
 
     scores = np.concatenate(scores)
     labels = {k: _concat(v) for k, v in labels.items()}
+    print ("scores",scores)
+    print ("labels",labels)
+    print ("labels[data_config.label_names[0]]",labels[data_config.label_names[0]])
     metric_results = evaluate_metrics(labels[data_config.label_names[0]], scores, eval_metrics=eval_metrics)
     _logger.info('Evaluation metrics: \n%s', '\n'.join(
         ['    - %s: \n%s' % (k, str(v)) for k, v in metric_results.items()]))
@@ -221,7 +228,7 @@ def evaluate_classification(model, test_loader, dev, epoch, for_training=True, l
                 for k, v in labels.items():
                     labels[k] = v.reshape((entry_count, -1))
         observers = {k: _concat(v) for k, v in observers.items()}
-        return total_correct / count, scores, labels, observers
+        return total_correct / count, scores, labels, labels_domain, observers
 
 
 def evaluate_onnx(model_path, test_loader, eval_metrics=['roc_auc_score', 'roc_auc_score_matrix', 'confusion_matrix']):
@@ -235,10 +242,12 @@ def evaluate_onnx(model_path, test_loader, eval_metrics=['roc_auc_score', 'roc_a
     count = 0
     scores = []
     labels = defaultdict(list)
+    labels_domain = defaultdict(list)
     observers = defaultdict(list)
     start_time = time.time()
     with tqdm.tqdm(test_loader) as tq:
-        for X, y, Z in tq:
+        # for X, y, Z in tq:
+        for X, y, y_domain, _, y_cat_check, y_domain_check in tq:
             inputs = {k: v.cpu().numpy() for k, v in X.items()}
             label = y[data_config.label_names[0]].cpu().numpy()
             num_examples = label.shape[0]
@@ -270,7 +279,7 @@ def evaluate_onnx(model_path, test_loader, eval_metrics=['roc_auc_score', 'roc_a
     _logger.info('Evaluation metrics: \n%s', '\n'.join(
         ['    - %s: \n%s' % (k, str(v)) for k, v in metric_results.items()]))
     observers = {k: _concat(v) for k, v in observers.items()}
-    return total_correct / count, scores, labels, observers
+    return total_correct / count, scores, labels, labels_domain, observers
 
 
 def train_regression(model, loss_func, opt, scheduler, train_loader, dev, epoch, steps_per_epoch=None, grad_scaler=None, tb_helper=None):
@@ -376,6 +385,7 @@ def evaluate_regression(model, test_loader, dev, epoch, for_training=True, loss_
     count = 0
     scores = []
     labels = defaultdict(list)
+    labels_domain = defaultdict(list)
     observers = defaultdict(list)
     start_time = time.time()
     with torch.no_grad():
@@ -449,7 +459,7 @@ def evaluate_regression(model, test_loader, dev, epoch, for_training=True, loss_
     else:
         # convert 2D labels/scores
         observers = {k: _concat(v) for k, v in observers.items()}
-        return total_loss / count, scores, labels, observers
+        return total_loss / count, scores, labels, labels_domain, observers
 
 
 class TensorboardHelper(object):
