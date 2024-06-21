@@ -26,7 +26,9 @@ def _finalize_inputs(table, data_config):
                 a = a.astype('int64')
             output[k] = a
     # copy labels
-    for k in data_config.label_names+data_config.label_domain_names:
+    # for k in data_config.label_names+data_config.label_domain_names:
+    #     output[k] = ak.to_numpy(table[k])
+    for k in data_config.label_names+data_config.target_names+data_config.label_domain_names:
         output[k] = ak.to_numpy(table[k])
     # copy labelcheck
     for k in data_config.labelcheck_names:
@@ -323,6 +325,8 @@ class _SimpleIter(object):
         X = {k: self.table['_' + k][i].copy() for k in self._data_config.input_names}
         # labels
         y_cat = {k: self.table[k][i].copy() for k in self._data_config.label_names}
+        # target for regression
+        y_reg = {k: self.table[k][i].copy() for k in self._data_config.target_names} 
         # labels for domain
         if self._data_config.label_domain_names:
             y_domain = {k: self.table[k][i].copy() for k in self._data_config.label_domain_names}        
@@ -344,7 +348,8 @@ class _SimpleIter(object):
         else:
             y_domain_check = {}
         # print (X, y_cat, y_domain, Z, y_cat_check, y_domain_check )
-        return X, y_cat, y_domain, Z, y_cat_check, y_domain_check 
+        # return X, y_cat, y_domain, Z, y_cat_check, y_domain_check 
+        return X, y_cat, y_reg, y_domain, Z, y_cat_check, y_domain_check 
 
 
 class SimpleIterDataset(torch.utils.data.IterableDataset):

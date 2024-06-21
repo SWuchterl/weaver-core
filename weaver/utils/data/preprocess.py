@@ -24,6 +24,8 @@ def _build_new_variables(table, funcs):
     for k, expr in funcs.items():
         if k in table.fields:
             continue
+        # print (k)
+        # print (expr)
         table[k] = _eval_expr(expr, table)
     return table
 

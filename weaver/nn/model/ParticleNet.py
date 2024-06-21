@@ -129,15 +129,31 @@ class ParticleNet(nn.Module):
     def __init__(self,
                  input_dims,
                  num_classes,
+                 num_targets,
+                 num_domains=[],
                  conv_params=[(7, (32, 32, 32)), (7, (64, 64, 64))],
                  fc_params=[(128, 0.1)],
                  use_fusion=True,
                  use_fts_bn=True,
                  use_counts=True,
+                 use_revgrad=False,
+                 split_domain_outputs=False,
                  for_inference=False,
+                 alpha_grad=1,
                  for_segmentation=False,
                  **kwargs):
         super(ParticleNet, self).__init__(**kwargs)
+
+        self.num_classes = num_classes;
+        self.num_targets = num_targets;
+        self.num_domains = num_domains;
+        self.for_inference = for_inference
+        self.alpha_grad = alpha_grad;
+        self.use_fts_bn = use_fts_bn
+        self.use_counts = use_counts        
+        self.fc_domain = None;
+        self.split_domain_outputs = split_domain_outputs;
+        self.for_segmentation = for_segmentation;
 
         self.use_fts_bn = use_fts_bn
         if self.use_fts_bn:
@@ -157,8 +173,7 @@ class ParticleNet(nn.Module):
             out_chn = np.clip((in_chn // 128) * 128, 128, 1024)
             self.fusion_block = nn.Sequential(nn.Conv1d(in_chn, out_chn, kernel_size=1, bias=False), nn.BatchNorm1d(out_chn), nn.ReLU())
 
-        self.for_segmentation = for_segmentation
-
+        # Fully connected layers for classification
         fcs = []
         for idx, layer_param in enumerate(fc_params):
             channels, drop_rate = layer_param
@@ -166,22 +181,63 @@ class ParticleNet(nn.Module):
                 in_chn = out_chn if self.use_fusion else conv_params[-1][1][-1]
             else:
                 in_chn = fc_params[idx - 1][0]
-            if self.for_segmentation:
-                fcs.append(nn.Sequential(nn.Conv1d(in_chn, channels, kernel_size=1, bias=False),
-                                         nn.BatchNorm1d(channels), nn.ReLU(), nn.Dropout(drop_rate)))
-            else:
-                fcs.append(nn.Sequential(nn.Linear(in_chn, channels), nn.ReLU(), nn.Dropout(drop_rate)))
-        if self.for_segmentation:
-            fcs.append(nn.Conv1d(fc_params[-1][0], num_classes, kernel_size=1))
-        else:
-            fcs.append(nn.Linear(fc_params[-1][0], num_classes))
-        self.fc = nn.Sequential(*fcs)
 
-        self.for_inference = for_inference
+            fcs.append(nn.Sequential(
+                nn.Linear(in_chn, channels), 
+                nn.ReLU(), 
+                nn.Dropout(drop_rate)))
+            
+        fcs.append(nn.Linear(fc_params[-1][0], num_classes+num_targets))
+        self.fc = nn.Sequential(*fcs)
+                
+        # Add or not the domain layers
+        if not for_inference and self.num_domains:
+            if not self.split_domain_outputs:
+                num_dom = sum(element for element in self.num_domains);
+                fcs_domain = []
+                if use_revgrad:
+                    fcs_domain.append(GradientReverse(self.alpha_grad));
+                for idx, layer_param in enumerate(fc_domain_params):
+                    channels, drop_rate = layer_param
+                    if idx == 0:
+                        in_chn = out_chn if self.use_fusion else conv_params[-1][1][-1]
+                    else:
+                        in_chn = fc_domain_params[idx - 1][0]
+                        
+                    fcs_domain.append(nn.Sequential(
+                        nn.Linear(in_chn, channels), 
+                        nn.ReLU(), 
+                        nn.Dropout(drop_rate)))
+
+                fcs_domain.append(nn.Linear(fc_domain_params[-1][0], num_dom))
+                self.fc_domain = nn.Sequential(*fcs_domain)
+            else:
+                for idd,dom in enumerate(self.num_domains):
+                    fcs_domain = [];
+                    if use_revgrad:
+                        fcs_domain.append(GradientReverse(self.alpha_grad));
+                    for idx, layer_param in enumerate(fc_domain_params):
+                        channels, drop_rate = layer_param
+                        if idx == 0:
+                            in_chn = out_chn if self.use_fusion else conv_params[-1][1][-1]
+                        else:
+                            in_chn = fc_domain_params[idx - 1][0]
+
+                        fcs_domain.append(nn.Sequential(
+                            nn.Linear(in_chn, channels), 
+                            nn.ReLU(), 
+                            nn.Dropout(drop_rate)))
+                        
+                    ## two output nodes for domain
+                    fcs_domain.append(nn.Linear(fc_domain_params[-1][0],dom))
+                    if self.fc_domain is None:
+                        self.fc_domain = nn.ModuleList([nn.Sequential(*fcs_domain)]);
+                    else:
+                        self.fc_domain.append(nn.Sequential(*fcs_domain));
 
     def forward(self, points, features, mask=None):
-#         print('points:\n', points)
-#         print('features:\n', features)
+        # print('points:\n', points)
+        # print('features:\n', features)
         if mask is None:
             mask = (features.abs().sum(dim=1, keepdim=True) != 0)  # (N, 1, P)
         points *= mask
@@ -215,9 +271,22 @@ class ParticleNet(nn.Module):
                 x = fts.mean(dim=-1)
 
         output = self.fc(x)
+          ## Prepare output for inference
         if self.for_inference:
-            output = torch.softmax(output, dim=1)
-        # print('output:\n', output)
+            if self.num_classes and not self.num_targets:
+                output = torch.softmax(output,dim=1);
+            elif self.num_classes and self.num_targets:
+                output_class = torch.softmax(output[:,:self.num_classes],dim=1)
+                output_reg = output[:,self.num_classes:self.num_classes+self.num_targets];
+                output = torch.cat((output_class,output_reg),dim=1);                
+        elif self.num_domains and self.fc_domain:
+            if not self.split_domain_outputs:
+                output_domain = self.fc_domain(x)
+                output = torch.cat((output,output_domain),dim=1);
+            else:
+                for i,fc in enumerate(self.fc_domain):
+                    output_domain = fc(x);
+                    output = torch.cat((output,output_domain),dim=1);                    
         return output
 
 
